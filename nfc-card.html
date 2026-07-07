@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AI视频名片</title>
+  <style>
+    /* ===== 全局重置 ===== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+      background: #0a0a1a;
+      color: #fff;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ===== 播放器容器 ===== */
+    .hero {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #0a0a2e 0%, #1a0a3e 50%, #0a0a1a 100%);
+      overflow: hidden;
+    }
+
+    /* 背景光晕 */
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 40%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+                  radial-gradient(circle at 70% 60%, rgba(168, 85, 247, 0.06) 0%, transparent 50%);
+      animation: glowPulse 6s ease-in-out infinite alternate;
+    }
+    @keyframes glowPulse {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(1.2); opacity: 1; }
+    }
+
+    /* NFC动画弧线 */
+    .nfc-arcs {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 280px; height: 280px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .nfc-arcs svg {
+      width: 100%; height: 100%;
+      animation: nfcWave 3s ease-in-out infinite;
+    }
+    @keyframes nfcWave {
+      0%, 100% { transform: scale(1); opacity: 0.15; }
+      50% { transform: scale(1.05); opacity: 0.3; }
+    }
+
+    /* ===== 头像 + 名片核心 ===== */
+    .card-core {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    .avatar-wrap {
+      position: relative;
+      width: 140px; height: 140px;
+      margin-bottom: 24px;
+    }
+    .avatar-ring {
+      position: absolute;
+      top: -6px; left: -6px;
+      width: 152px; height: 152px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #a855f7, #6366f1);
+      background-size: 200% 200%;
+      animation: ringSpin 4s linear infinite;
+      z-index: 0;
+    }
+    @keyframes ringSpin {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .avatar {
+      position: relative;
+      z-index: 1;
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.15);
+      object-fit: cover;
+      background: #1a1a3a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 56px;
+      color: #6366f1;
+    }
+    .avatar img {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, 0.15);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 12px;
+      color: #a5b4fc;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+    }
+    .badge svg { width: 14px; height: 14px; }
+
+    .name {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, #fff 60%, #a5b4fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .title {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      font-weight: 400;
+    }
+
+    .tagline {
+      font-size: 15px;
+      color: #cbd5e1;
+      line-height: 1.8;
+      max-width: 320px;
+      margin-bottom: 32px;
+      padding: 16px 24px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(10px);
+    }
+
+    /* ===== 按钮样式 ===== */
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 16px 24px;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      border: none;
+    }
+    .btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+    }
+    .btn-primary:active { transform: scale(0.97); }
+
+    .btn-outline {
+      background: transparent;
+      color: #cbd5e1;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .btn-outline:active {
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* ===== 下方详情区 ===== */
+    .detail-section {
+      padding: 48px 24px 80px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title svg { width: 22px; height: 22px; color: #6366f1; }
+
+    .case-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .case-card:last-child { margin-bottom: 0; }
+    .case-tag {
+      display: inline-block;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .case-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .case-desc {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .contact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .contact-item {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+    .contact-item:active {
+      background: rgba(255,255,255,0.08);
+      transform: scale(0.97);
+    }
+    .contact-item svg { width: 24px; height: 24px; color: #6366f1; margin-bottom: 8px; }
+    .contact-item .label {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .contact-item .value {
+      font-size: 14px;
+      color: #fff;
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* ===== 底部水印 ===== */
+    .footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .footer .powered {
+      font-size: 12px;
+      color: #475569;
+      letter-spacing: 0.5px;
+    }
+    .footer .powered span { color: #6366f1; }
+
+    /* ===== Toast 提示 ===== */
+    .toast {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(0,0,0,0.85);
+      backdrop-filter: blur(20px);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 12px;
+      font-size: 14px;
+      z-index: 999;
+      opacity: 0;
+      transition: all 0.4s ease;
+      pointer-events: none;
+      white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ===== 视频弹窗 ===== */
+    .video-modal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .video-modal.show {
+      display: flex;
+    }
+    .video-modal .close {
+      position: absolute;
+      top: 16px; right: 20px;
+      font-size: 28px;
+      color: #fff;
+      cursor: pointer;
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.1);
+      border-radius: 50%;
+      border: none;
+      z-index: 101;
+    }
+    .video-wrapper {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .video-wrapper video {
+      width: 100%;
+      border-radius: 16px;
+    }
+
+    /* ===== 入场动画 ===== */
+    .fade-in-up {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: all 0.6s ease;
+    }
+    .fade-in-up.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .delay-1 { transition-delay: 0.1s; }
+    .delay-2 { transition-delay: 0.2s; }
+    .delay-3 { transition-delay: 0.3s; }
+    .delay-4 { transition-delay: 0.4s; }
+  </style>
+</head>
+<body>
+
+  <!-- ===== Hero 区域 ===== -->
+  <section class="hero">
+    <!-- NFC动画弧线 -->
+    <div class="nfc-arcs">
+      <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M60 60 Q60 20 100 20 Q140 20 140 60" stroke="#6366f1" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+        <path d="M40 80 Q40 20 100 20 Q160 20 160 80" stroke="#818cf8" stroke-width="1.5" stroke-linecap="round" opacity="0.3"/>
+        <path d="M80 50 Q80 35 100 35 Q120 35 120 50" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+      </svg>
+    </div>
+
+    <!-- 名片核心 -->
+    <div class="card-core">
+      <div class="badge fade-in-up visible" id="badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        AI名片 · NFC触碰即播
+      </div>
+
+      <div class="avatar-wrap fade-in-up visible delay-1">
+        <div class="avatar-ring"></div>
+        <div class="avatar" id="avatarDisplay">👤</div>
+      </div>
+
+      <h1 class="name fade-in-up visible delay-2" id="clientName">您的姓名</h1>
+      <p class="title fade-in-up visible delay-2" id="clientTitle">职业 / 头衔</p>
+
+      <div class="tagline fade-in-up visible delay-3" id="clientTagline">
+        专注解决 **核心痛点** · 帮助客户实现 **具体成果**
+      </div>
+
+      <div class="actions fade-in-up visible delay-4">
+        <button class="btn btn-primary" onclick="playVideo()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/>
+          </svg>
+          观看 AI 数字人介绍
+        </button>
+        <button class="btn btn-outline" onclick="saveContact()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+          保存联系人
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 视频弹窗 ===== -->
+  <div class="video-modal" id="videoModal">
+    <button class="close" onclick="closeVideo()">✕</button>
+    <div class="video-wrapper">
+      <video id="clientVideo" controls playsinline webkit-playsinline>
+        <source src="" type="video/mp4">
+      </video>
+    </div>
+  </div>
+
+  <!-- ===== 详情区 ===== -->
+  <section class="detail-section">
+
+    <!-- 成功案例 -->
+    <div class="section-title fade-in-up">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      成功案例
+    </div>
+    <div id="casesContainer"></div>
+
+    <!-- 联系方式 -->
+    <div class="section-title fade-in-up" style="margin-top: 32px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+        <polyline points="22,6 12,13 2,6"/>
+      </svg>
+      联系方式
+    </div>
+    <div class="contact-grid fade-in-up" id="contactGrid">
+      <a class="contact-item" href="tel:" id="phoneLink">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+        <div class="label">电话</div>
+        <div class="value" id="phoneValue">--</div>
+      </a>
+      <a class="contact-item" href="https://wpa.qq.com/msgrd?v=3&uin=&site=qq&menu=yes" id="qqLink" target="_blank">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <div class="label">QQ</div>
+        <div class="value" id="qqValue">--</div>
+      </a>
+      <a class="contact-item" href="javascript:void(0)" onclick="copyWechat()" style="grid-column: span 2;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <div class="label">微信</div>
+        <div class="value" id="wechatValue">点击复制微信号</div>
+      </a>
+    </div>
+
+    <!-- NFC提示 -->
+    <div style="margin-top: 40px; background: rgba(99,102,241,0.06); border: 1px dashed rgba(99,102,241,0.2); border-radius: 16px; padding: 20px; text-align: center;">
+      <svg style="width: 32px; height: 32px; color: #6366f1; margin-bottom: 8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      <p style="font-size: 14px; color: #94a3b8;">
+        📱 用手机 NFC 碰一下名片卡片<br>
+        即可自动打开本页面
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== 底部 ===== -->
+  <div class="footer">
+    <p class="powered">AI 视频名片 · 由 <span>麒麟 🦄</span> 驱动</p>
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ========== 配置区 ==========
+    // 所有客户数据都在这里，修改这个对象即可生成新名片
+    const CARD_DATA = {
+      name: '您的姓名',
+      title: '职业 / 头衔',
+      tagline: '专注解决 **核心痛点** · 帮助客户实现 **具体成果**',
+
+      // 头像：留空显示默认图标，填写图片URL
+      avatar: '', // 例如 'https://example.com/avatar.jpg'
+
+      // 数字人视频
+      videoUrl: '', // MP4视频链接
+
+      // 成功案例（支持1-3个）
+      cases: [
+        {
+          tag: '案例一',
+          title: '客户案例标题',
+          desc: '通过您的服务，帮助客户实现了什么样的具体成果，用数据说话更好。'
+        },
+        {
+          tag: '案例二',
+          title: '客户案例标题',
+          desc: '通过您的服务，帮助客户实现了什么样的具体成果，用数据说话更好。'
+        }
+      ],
+
+      // 联系方式
+      phone: '',
+      qq: '',
+      wechat: ''
+    };
+
+    // ========== 渲染 ==========
+    function renderCard() {
+      const d = CARD_DATA;
+
+      document.getElementById('clientName').textContent = d.name;
+      document.getElementById('clientTitle').textContent = d.title;
+      document.getElementById('clientTagline').innerHTML = d.tagline;
+
+      // 头像
+      if (d.avatar) {
+        document.getElementById('avatarDisplay').innerHTML = `<img src="${d.avatar}" alt="${d.name}">`;
+      }
+
+      // 视频
+      if (d.videoUrl) {
+        document.querySelector('#clientVideo source').src = d.videoUrl;
+        document.querySelector('#clientVideo').load();
+      }
+
+      // 案例
+      const casesHtml = d.cases.map(c => `
+        <div class="case-card fade-in-up">
+          <span class="case-tag">${c.tag}</span>
+          <div class="case-title">${c.title}</div>
+          <div class="case-desc">${c.desc}</div>
+        </div>
+      `).join('');
+      document.getElementById('casesContainer').innerHTML = casesHtml;
+
+      // 联系方式
+      if (d.phone) {
+        document.getElementById('phoneLink').href = 'tel:' + d.phone;
+        document.getElementById('phoneValue').textContent = d.phone;
+      }
+      if (d.qq) {
+        document.getElementById('qqLink').href = 'https://wpa.qq.com/msgrd?v=3&uin=' + d.qq + '&site=qq&menu=yes';
+        document.getElementById('qqValue').textContent = d.qq;
+      }
+      if (d.wechat) {
+        document.getElementById('wechatValue').textContent = d.wechat;
+      }
+    }
+
+    // ========== 功能函数 ==========
+    function playVideo() {
+      const video = document.getElementById('clientVideo');
+      if (!video.querySelector('source').src) {
+        showToast('⚠️ 视频尚未配置');
+        return;
+      }
+      document.getElementById('videoModal').classList.add('show');
+      video.play().catch(() => {});
+    }
+    function closeVideo() {
+      const video = document.getElementById('clientVideo');
+      document.getElementById('videoModal').classList.remove('show');
+      video.pause();
+    }
+
+    function saveContact() {
+      const d = CARD_DATA;
+      if (!d.phone && !d.qq && !d.wechat) {
+        showToast('⚠️ 暂无联系方式可保存');
+        return;
+      }
+      // 生成vCard
+      const parts = [];
+      parts.push('BEGIN:VCARD', 'VERSION:3.0');
+      parts.push('FN:' + d.name);
+      parts.push('N:' + d.name + ';;;');
+      if (d.title) parts.push('TITLE:' + d.title);
+      if (d.phone) parts.push('TEL;TYPE=CELL:' + d.phone);
+      if (d.qq) parts.push('NOTE:QQ:' + d.qq);
+      if (d.wechat) parts.push('NOTE:微信:' + d.wechat);
+      if (d.videoUrl) parts.push('URL:' + d.videoUrl);
+      parts.push('END:VCARD');
+
+      const blob = new Blob([parts.join('\n')], { type: 'text/vcard;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = d.name + '的名片.vcf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('✅ 联系人已保存到通讯录');
+    }
+
+    function copyWechat() {
+      const w = CARD_DATA.wechat;
+      if (!w) { showToast('⚠️ 未设置微信'); return; }
+      // 尝试 Clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(w).then(() => {
+          showToast('✅ 微信号已复制: ' + w);
+        }).catch(() => {
+          fallbackCopy(w);
+        });
+      } else {
+        fallbackCopy(w);
+      }
+    }
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); showToast('✅ 微信号已复制'); } catch(e) { showToast('⚠️ 复制失败，请手动复制'); }
+      document.body.removeChild(ta);
+    }
+
+    // Toast 提示
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    // 滚动入场动画
+    function handleScroll() {
+      document.querySelectorAll('.fade-in-up').forEach(el => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight - 80) {
+          el.classList.add('visible');
+        }
+      });
+    }
+    window.addEventListener('scroll', handleScroll);
+    handleScroll();
+
+    // ========== 启动 ==========
+    renderCard();
+  </script>
+</body>
+</html>
